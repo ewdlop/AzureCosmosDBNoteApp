@@ -7,9 +7,11 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AzureCosmosDBNoteApp", "Azu
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CosmosDBPartialUpdateTypeConverter", "..\..\CosmosDBPartialUpdateTypeConverter\CosmosDBPartialUpdateTypeConverter.csproj", "{660C69CE-A073-4173-8DE5-4D35E976A7B2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shared", "..\Shared\Shared.csproj", "{479BF0B6-0645-43B9-B35D-955F7429C9D4}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shared", "..\Shared\Shared.csproj", "{479BF0B6-0645-43B9-B35D-955F7429C9D4}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ConsoleApp", "..\..\CosmosDBPartialUpdateTypeConverter\ConsoleApp\ConsoleApp.csproj", "{8DD2D75A-E96D-4143-9E74-2EF772C2F496}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AzureCosomosDBNoteTestProject", "..\AzureCosomosDBNoteTestProject\AzureCosomosDBNoteTestProject.csproj", "{609A2704-77D2-4C83-BCD7-4867DB78975B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,6 +35,10 @@ Global
 		{8DD2D75A-E96D-4143-9E74-2EF772C2F496}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8DD2D75A-E96D-4143-9E74-2EF772C2F496}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8DD2D75A-E96D-4143-9E74-2EF772C2F496}.Release|Any CPU.Build.0 = Release|Any CPU
+		{609A2704-77D2-4C83-BCD7-4867DB78975B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{609A2704-77D2-4C83-BCD7-4867DB78975B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{609A2704-77D2-4C83-BCD7-4867DB78975B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{609A2704-77D2-4C83-BCD7-4867DB78975B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

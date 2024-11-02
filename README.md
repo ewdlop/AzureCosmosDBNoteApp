@@ -6,8 +6,10 @@ To Build the sln locally, please clone the following repository to your local ma
 (not submoduled)
 Project Reference: https://github.com/ewdlop/CosmosDBPartialUpdateTypeConverter
 
+# Performance? 
+https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/materialized-views?tabs=azure-portal
 
-# 08/14/2024 Upate
+## 08/14/2024 Upate
 https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/how-to-migrate-from-bulk-executor-library
 ```
 BulkOperations<MyItem> bulkOperations = new BulkOperations<MyItem>(documentsToWorkWith.Count);

@@ -7,7 +7,7 @@ To Build the sln locally, please clone the following repository to your local ma
 Project Reference: https://github.com/ewdlop/CosmosDBPartialUpdateTypeConverter
 
 # Performance? 
-https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/materialized-views?tabs=azure-portal
+https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/materialized-views?tabs=azure-portal#Previewing
 
 ## 08/14/2024 Upate
 https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/how-to-migrate-from-bulk-executor-library

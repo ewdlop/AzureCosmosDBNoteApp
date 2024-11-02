@@ -10,6 +10,24 @@ Project Reference: https://github.com/ewdlop/CosmosDBPartialUpdateTypeConverter
 https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/session-state-and-caching-provider
 
 ```cs
+public class MyBusinessClass
+{
+    private readonly IDistributedCache cache;
+
+    public MyBusinessClass(IDistributedCache cache)
+    {
+        this.cache = cache;
+    }
+    
+    public async Task SomeOperationAsync()
+    {
+        string someCachedValue = await this.cache.GetStringAsync("someKey");
+        /* Use the cache */
+    }
+}
+```
+
+```cs
 void captureDiagnostics(CosmosDiagnostics diagnostics)
 {
     if (diagnostics.GetClientElapsedTime() > SomePredefinedThresholdTime)

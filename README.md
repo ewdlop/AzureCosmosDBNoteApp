@@ -1,10 +1,18 @@
 # AzureCosmosDBNoteApp
 
-
 To Build the sln locally, please clone the following repository to your local machine.
 
 (not submoduled)
 Project Reference: https://github.com/ewdlop/CosmosDBPartialUpdateTypeConverter
+
+#Client sideeeeeeeee
+https://learn.microsoft.com/en-us/azure/cosmos-db/how-to-always-encrypted?tabs=dotnet
+https://learn.microsoft.com/en-us/sql/relational-databases/security/encryption/always-encrypted-cryptography?view=sql-server-ver16#step-1-generating-the-initialization-vector-iv
+
+https://www.ezpassnj.com/en/home/index.shtml <---shtml!?
+https://en.wikipedia.org/wiki/Server_Side_Includes
+
+https://learn.microsoft.com/en-us/sql/relational-databases/security/encryption/always-encrypted-cryptography?view=sql-server-ver16#step-1-generating-the-initialization-vector-iv
 
 # Performance? 
 https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/materialized-views?tabs=azure-portal#Previewing

@@ -115,3 +115,8 @@ https://www.youtube.com/watch?v=D5xU7_98jWc
 #  geo-redundancy
 
 https://www.infobip.com/glossary/geo-redundancy
+
+https://learn.microsoft.com/en-us/dotnet/api/microsoft.azure.management.cosmosdb.fluent.models.location?view=azure-dotnet-legacy
+
+https://learn.microsoft.com/en-us/java/api/com.microsoft.azure.management.cosmosdb.location?view=azure-java-legacy
+

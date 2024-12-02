@@ -110,3 +110,8 @@ services.AddCosmosCache((CosmosCacheOptions cacheOptions) =>
 # Also NOSQL 
 https://www.youtube.com/watch?v=D5xU7_98jWc
 ![image](https://github.com/user-attachments/assets/982d6f6e-286b-4c94-88e4-d3e71330af9e)
+
+
+#  geo-redundancy
+
+https://www.infobip.com/glossary/geo-redundancy

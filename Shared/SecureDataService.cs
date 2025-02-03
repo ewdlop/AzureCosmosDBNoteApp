@@ -205,7 +205,8 @@ public class EnhancedSecureDataService : SecureDataService
         // Custom key provider implementation
         return new CustomKeyWrapProvider(_credential);
     }
-}{// Example usage 
+}
+
 public class Program
 {
     public static async Task Main()
@@ -242,4 +243,4 @@ public class Program
 
         await ((IAsyncDisposable)secureService).DisposeAsync();
     }
-}}
+}

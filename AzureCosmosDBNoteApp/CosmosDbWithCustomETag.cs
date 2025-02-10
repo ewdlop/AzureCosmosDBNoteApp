@@ -3,6 +3,33 @@ using System.Net;
 using System.Threading.Tasks;
 using Microsoft.Azure.Cosmos;
 
+using System;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+
+public class ETagFactory
+{
+    public static string GenerateETag<T>(T item)
+    {
+        if (item == null)
+        {
+            throw new ArgumentNullException(nameof(item), "Item cannot be null");
+        }
+
+        // Convert item to JSON
+        string json = JsonSerializer.Serialize(item);
+
+        // Compute SHA-256 hash
+        using (SHA256 sha256 = SHA256.Create())
+        {
+            byte[] hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(json));
+            return Convert.ToBase64String(hashBytes);
+        }
+    }
+}
+
+
 public class CosmosDbWithCustomETag
 {
     private static readonly string EndpointUri = "https://your-cosmosdb.documents.azure.com:443/";

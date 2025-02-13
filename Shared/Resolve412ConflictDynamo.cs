@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
+using System.Numerics;
 using System.Threading.Tasks;
 using Microsoft.Azure.Cosmos;
 
@@ -168,7 +169,13 @@ class Program
     }
 #endif
 
-    // Function to compare patched fields with the latest document state
+    /// <summary>
+    /// Function to compare patched fields with the latest document state
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="latestDoc"></param>
+    /// <param name="patchOperations"></param>
+    /// <returns></returns>
     static bool ComparePatchedFields<T>(dynamic latestDoc, List<PatchOperation<T>> patchOperations)
     {
         foreach (var op in patchOperations)
@@ -220,27 +227,58 @@ class Program
     }
 #endif
 
+    /// <summary>
+    /// Function to resolve conflicts using a tie-breaker strategy
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="latestDoc"></param>
+    /// <param name="patchOperations"></param>
     static void ResolveConflict<T>(dynamic latestDoc, List<PatchOperation<T>> patchOperations)
     {
-        foreach (var op in patchOperations)
+        foreach (var op in new List<PatchOperation<T>>(patchOperations))
         {
             string path = op.Path.TrimStart('/');
-            T newValue = op.Value;
-
+            T? newValue = op.OperationType switch
+            {
+                PatchOperationType.Increment => op switch
+                {
+                    PatchOperation<long> longPatchOperation => latestDoc[path] is not null ? Convert.ToInt64(latestDoc[path]) + op.Value : null,
+                    PatchOperation<double> doublePatchOperation => latestDoc[path] is not null ? Convert.ToDouble(latestDoc[path]) + op.Value : null,
+                    _ => throw new NotSupportedException("Unsupported PatchOperation type")
+                },
+                _ => op.Value
+            };
+            if (latestDoc[path] is null)
+            {
+                if(op.OperationType == PatchOperationType.Increment || 
+                     op.OperationType == PatchOperationType.Replace ||
+                     op.OperationType == PatchOperationType.Set)
+                {
+                    //If the field is null, we can't increment or replace it
+                    patchOperations.Remove(op);
+                    //Depending on the use case, you may want to add a new operation to set the value
+                    //patchOperations.Add(PatchOperation.Set(path, newValue));
+                }
+                continue;
+            }
             // Example: Tie-breaker using LastUpdated timestamp
             if (latestDoc.ContainsKey("lastUpdated"))
             {
-                DateTime latestTimestamp = DateTime.Parse(latestDoc["lastUpdated"]);
+                DateTime latestTimestamp = DateTime.TryParse(latestDoc["lastUpdated"], out latestTimestamp);
                 DateTime incomingTimestamp = DateTime.UtcNow; // Assume incoming update is "now"
 
                 if (incomingTimestamp > latestTimestamp)
                 {
                     Console.WriteLine($"Applying new value for {path} based on latest timestamp.");
-                    latestDoc[path] = newValue;
+                    if (latestDoc[path] is not null)
+                    {
+                        latestDoc[path] = newValue;
+                    }
                 }
                 else
                 {
                     Console.WriteLine($"Skipping update for {path} as existing data is newer.");
+                    patchOperations.Remove(op); // Skip this operation
                 }
             }
             else
@@ -250,6 +288,7 @@ class Program
             }
         }
     }
+
 
 #if false
     // Function to remove fields from patchOperations if their values are unchanged
@@ -277,8 +316,48 @@ class Program
     }
 
 #endif
-    // Function to remove fields from patchOperations if their values are unchanged
-    static List<PatchOperation<T>> FilterUnchangedFields<T>(dynamic latestDoc, List<PatchOperation<T>> patchOperations)
+    
+    /// <summary>
+    /// Function to remove fields from patchOperations if their values are unchanged
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="latestDoc"></param>
+    /// <param name="patchOperations"></param>
+    /// <returns></returns>
+    static List<PatchOperation<T>> FilterUnchangedFields<T>(dynamic latestDoc, List<PatchOperation<T>> patchOperations,
+        Func<T,T,int>? orderFunc = null,
+        IComparable<T>? comparable = null,
+        IComparer<T>? comparer = null)
+    {
+        List<PatchOperation<T>> filteredOperations = new();
+
+        foreach (var op in patchOperations)
+        {
+            string path = op.Path.TrimStart('/');
+            T newValue = op.Value;
+            T currentValue = latestDoc[path];
+
+            if (!Equals(currentValue, newValue))
+            {
+                filteredOperations.Add(op);  // Keep only changed fields
+            }
+            else
+            {
+                Console.WriteLine($"Skipping unchanged field: {path}");
+            }
+        }
+        return filteredOperations;
+    }
+
+    /// <summary>
+    /// Function to remove fields from patchOperations if their values are unchanged
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="latestDoc"></param>
+    /// <param name="patchOperations"></param>
+    /// <param name="comparable"></param>
+    /// <returns></returns>
+    static List<PatchOperation<T>> FilterUnchangedFields<T>(dynamic latestDoc, List<PatchOperation<T>> patchOperations, IComparable<T> comparable)
     {
         List<PatchOperation<T>> filteredOperations = new();
 

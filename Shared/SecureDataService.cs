@@ -3,7 +3,9 @@ using Azure.Core;
 using Azure.Identity;
 using System.Security.Cryptography;
 using System.Text.Json;
+using Microsoft.Azure.Cosmos.Encryption;
 
+#if false
 public interface ISecureDataOperation<T> where T : class
 {
     Task<T> StoreAsync(T data);
@@ -21,6 +23,10 @@ public interface IEncryptedEntity
     string Id { get; set; }
     string PartitionKey { get; set; }
     DateTime Timestamp { get; set; }
+}
+
+public class EncryptedAttribute : Attribute
+{
 }
 
 public class SensitiveData : IEncryptedEntity
@@ -206,8 +212,7 @@ public class EnhancedSecureDataService : SecureDataService
         return new CustomKeyWrapProvider(_credential);
     }
 }
-
-public class Program
+public partial class Program
 {
     public static async Task Main()
     {
@@ -244,3 +249,4 @@ public class Program
         await ((IAsyncDisposable)secureService).DisposeAsync();
     }
 }
+#endif

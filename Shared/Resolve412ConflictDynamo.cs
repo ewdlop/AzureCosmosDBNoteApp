@@ -5,7 +5,7 @@ using System.Numerics;
 using System.Threading.Tasks;
 using Microsoft.Azure.Cosmos;
 
-class Program
+class Program : IAsyncDisposable
 {
     private static readonly string EndpointUri = "https://your-cosmos-account.documents.azure.com:443/";
     private static readonly string PrimaryKey = "your-primary-key";
@@ -16,11 +16,13 @@ class Program
 
     private static CosmosClient cosmosClient;
     private static Container container;
+    private static CancellationTokenSource cancellationTokenSource;
 
     static async Task Main(string[] args)
     {
         cosmosClient = new CosmosClient(EndpointUri, PrimaryKey);
         container = cosmosClient.GetContainer(DatabaseId, ContainerId);
+        cancellationTokenSource = new CancellationTokenSource();
 
         // Define partial update operation
         List<PatchOperation> patchOperations = new()
@@ -50,7 +52,8 @@ class Program
                     itemId,
                     new PartitionKey(partitionKey),
                     patchOperations,
-                    new PatchItemRequestOptions { IfMatchEtag = etag }  // Enforce ETag check
+                    new PatchItemRequestOptions { IfMatchEtag = etag },
+                    cancellationTokenSource.Token  // Enforce ETag check
                 );
 
                 Console.WriteLine($"PATCH succeeded on attempt {attempt + 1}");
@@ -92,10 +95,10 @@ class Program
     }
 #endif
 
-    static async Task PatchWithRetriesAsync<T>(string itemId, string partitionKey, List<PatchOperation<T>> patchOperations, int maxRetries = 5)
+    static async Task PatchWithRetriesAsync<T>(string itemId, string partitionKey, List<PatchOperation<T>> patchOperations, int maxRetries = 5, CancellationToken cancellationToken = default)
     {
         int attempt = 0;
-        while (attempt < maxRetries)
+        while (attempt < maxRetries && patchOperations is not [])
         {
             try
             {
@@ -108,11 +111,22 @@ class Program
                     itemId,
                     new PartitionKey(partitionKey),
                     patchOperations,
-                    new PatchItemRequestOptions { IfMatchEtag = etag }  // Enforce ETag check
+                    new PatchItemRequestOptions { IfMatchEtag = etag },  // Enforce ETag check
+                    cancellationTokenSource.Token
                 );
 
-                Console.WriteLine($"PATCH succeeded on attempt {attempt + 1}");
-                return;  // Success, exit loop
+                switch(patchedItem.StatusCode)
+                {
+                    case HttpStatusCode.OK:
+                        Console.WriteLine($"PATCH succeeded on attempt {attempt + 1}");
+                        return;  // Success, exit loop
+                    case HttpStatusCode.NotModified:
+                        Console.WriteLine($"PATCH unsucessfully on attempt {attempt + 1}");
+                        return;
+                    default:
+                        Console.WriteLine($"{patchedItem.StatusCode}");
+                        break;
+                }
             }
             catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.PreconditionFailed)
             {
@@ -377,5 +391,11 @@ class Program
             }
         }
         return filteredOperations;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await cancellationTokenSource.CancelAsync();
+        cancellationTokenSource.Dispose();
     }
 }

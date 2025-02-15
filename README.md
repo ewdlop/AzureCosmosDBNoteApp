@@ -1,5 +1,6 @@
 # AzureCosmosDBNoteApp
 
+```markdown
 To Build the sln locally, please clone the following repository to your local machine.
 
 (not submoduled)
@@ -13,13 +14,17 @@ https://www.ezpassnj.com/en/home/index.shtml <---shtml!?
 https://en.wikipedia.org/wiki/Server_Side_Includes
 
 https://learn.microsoft.com/en-us/sql/relational-databases/security/encryption/always-encrypted-cryptography?view=sql-server-ver16#step-1-generating-the-initialization-vector-iv
+```
 
-# Performance? 
+## Performance?
+```markdown
 https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/materialized-views?tabs=azure-portal#Previewing
 
-## 08/14/2024 Upate
-https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/how-to-migrate-from-bulk-executor-library
 ```
+## 08/14/2024 Upate
+```markdown
+https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/how-to-migrate-from-bulk-executor-library
+```cs
 BulkOperations<MyItem> bulkOperations = new BulkOperations<MyItem>(documentsToWorkWith.Count);
 foreach (MyItem document in documentsToWorkWith)
 {
@@ -107,16 +112,21 @@ services.AddCosmosCache((CosmosCacheOptions cacheOptions) =>
     /* other options */
 });
 ```
-# Also NOSQL 
+
+## Also NOSQL 
+
 https://www.youtube.com/watch?v=D5xU7_98jWc
 ![image](https://github.com/user-attachments/assets/982d6f6e-286b-4c94-88e4-d3e71330af9e)
 
 
-#  geo-redundancy
+## geo-redundancy
 
-https://www.infobip.com/glossary/geo-redundancy
+<https://www.infobip.com/glossary/geo-redundancy>
 
-https://learn.microsoft.com/en-us/dotnet/api/microsoft.azure.management.cosmosdb.fluent.models.location?view=azure-dotnet-legacy
+<https://learn.microsoft.com/en-us/dotnet/api/microsoft.azure.management.cosmosdb.fluent.models.location?view=azure-dotnet-legacy>
 
-https://learn.microsoft.com/en-us/java/api/com.microsoft.azure.management.cosmosdb.location?view=azure-java-legacy
+<https://learn.microsoft.com/en-us/java/api/com.microsoft.azure.management.cosmosdb.location?view=azure-java-legacy>
 
+## pusedo-Reference
+
+> microsoft docs, course lectures, books, videos, by professionals

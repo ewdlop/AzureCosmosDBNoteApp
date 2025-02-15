@@ -130,3 +130,5 @@ https://www.youtube.com/watch?v=D5xU7_98jWc
 ## pusedo-Reference
 
 > microsoft docs, course lectures, books, videos, by professionals
+
+## Azure Cosmsdb Emulator is not free.

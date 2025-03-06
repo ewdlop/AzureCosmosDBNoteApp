@@ -132,3 +132,7 @@ https://www.youtube.com/watch?v=D5xU7_98jWc
 > microsoft docs, course lectures, books, videos, by professionals
 
 ## Azure Cosmsdb Emulator is not free.
+
+## EntityFramework Core Typebuilderextensions
+
+[EntityFramework Core Typebuilderextensions - https://learn.microsoft.com/en-us/dotnet/api/microsoft.entityframeworkcore.cosmosentitytypebuilderextensions?view=efcore-9.0](https://learn.microsoft.com/en-us/dotnet/api/microsoft.entityframeworkcore.cosmosentitytypebuilderextensions?view=efcore-9.0)

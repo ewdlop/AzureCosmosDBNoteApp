@@ -1,6 +1,6 @@
 # 全域攔截並統一改寫所有 JSON 輸出
 
-可以。要「全域攔截並統一改寫所有 JSON 輸出」而不去改每個端點，常見做法有三種，依你是 MVC 控制器或 Minimal API 而定：
+ChatGPT:可以。要「全域攔截並統一改寫所有 JSON 輸出」而不去改每個端點，常見做法有三種，依你是 MVC 控制器或 Minimal API 而定：
 
 # 1) MVC/Controllers：Result Filter（建議）
 

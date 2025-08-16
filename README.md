@@ -131,7 +131,9 @@ https://www.youtube.com/watch?v=D5xU7_98jWc
 
 > microsoft docs, course lectures, books, videos, by professionals
 
-## Azure Cosmsdb Emulator is not free.
+## Azure Cosmsdb Emulator is not [really] free.(you can download it but the software doesn't emulate it locally)
+"The Azure Cosmos DB Emulator is a powerful tool for local development and testing of applications that interact with Azure Cosmos"
+
 
 ## EntityFramework Core Typebuilderextensions
 

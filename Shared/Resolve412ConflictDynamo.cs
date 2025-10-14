@@ -4,6 +4,7 @@ using System.Net;
 using System.Numerics;
 using System.Threading.Tasks;
 using Microsoft.Azure.Cosmos;
+using Shared;
 
 class Program : IAsyncDisposable
 {
@@ -35,7 +36,6 @@ class Program : IAsyncDisposable
 #endif
     }
 
-#if false
     static async Task PatchWithRetriesAsync(string itemId, string partitionKey, List<PatchOperation> patchOperations, int maxRetries = 5)
     {
         int attempt = 0;
@@ -93,7 +93,6 @@ class Program : IAsyncDisposable
 
         Console.WriteLine("PATCH operation failed after max retries.");
     }
-#endif
 
     static async Task PatchWithRetriesAsync<T>(string itemId, string partitionKey, List<PatchOperation<T>> patchOperations, int maxRetries = 5, CancellationToken cancellationToken = default)
     {
@@ -163,6 +162,100 @@ class Program : IAsyncDisposable
         Console.WriteLine("PATCH operation failed after max retries.");
     }
 
+    static async Task PatchWithRetriesAsync(string itemId, string partitionKey, List<PatchOperationDynamic> patchOperations, int maxRetries = 5, CancellationToken cancellationToken = default)
+    {
+        int attempt = 0;
+        while (attempt < maxRetries && patchOperations is not [])
+        {
+            try
+            {
+                // Step 1: Fetch latest ETag before applying patch
+                ItemResponse<dynamic> currentItem = await container.ReadItemAsync<dynamic>(itemId, new PartitionKey(partitionKey));
+                string etag = currentItem.ETag;  // Latest ETag
+
+                // Step 2: Apply Patch with ETag validation
+                ItemResponse<dynamic> patchedItem = await container.PatchItemAsync<dynamic>(
+                    itemId,
+                    new PartitionKey(partitionKey),
+                    patchOperations,
+                    new PatchItemRequestOptions { IfMatchEtag = etag },  // Enforce ETag check
+                    cancellationTokenSource.Token
+                );
+
+                switch (patchedItem.StatusCode)
+                {
+                    case HttpStatusCode.OK:
+                        Console.WriteLine($"PATCH succeeded on attempt {attempt + 1}");
+                        return;  // Success, exit loop
+                    case HttpStatusCode.NotModified:
+                        Console.WriteLine($"PATCH unsucessfully on attempt {attempt + 1}");
+                        return;
+                    default:
+                        Console.WriteLine($"{patchedItem.StatusCode}");
+                        break;
+                }
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.PreconditionFailed)
+            {
+                Console.WriteLine($"412 Precondition Failed - Conflict detected. Retrying... (Attempt {attempt + 1})");
+
+                // Step 3: Fetch latest version of the document
+                ItemResponse<dynamic> latestItem = await container.ReadItemAsync<dynamic>(itemId, new PartitionKey(partitionKey));
+                string latestEtag = latestItem.ETag;  // Updated ETag
+
+                // Step 4: Compare fields to check if conflicting updates exist
+                bool fieldsAreSame = ComparePatchedFields(latestItem.Resource, patchOperations);
+
+                if (fieldsAreSame)
+                {
+                    Console.WriteLine("Fields are unchanged, retrying with latest ETag...");
+                }
+                else
+                {
+                    Console.WriteLine("Conflict detected, resolving using tie-breaker...");
+
+                    // Step 5: Resolve conflict using a tie-breaker strategy
+                    ResolveConflict(latestItem.Resource, patchOperations);
+                }
+
+                attempt++;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Unexpected error: {ex.Message}");
+                break;
+            }
+        }
+
+        Console.WriteLine("PATCH operation failed after max retries.");
+    }
+
+    static bool ComparePatchedField(dynamic latestDoc, PatchOperationDynamic patchOperation)
+    {
+        string path = patchOperation.Path.TrimStart('/');
+        dynamic newValue = patchOperation.Value;
+        dynamic currentValue = latestDoc[path];
+
+        if (!Equals(currentValue, newValue))
+        {
+            return false; // Conflict detected
+        }
+        return true; // No changes, safe to retry
+    }
+
+    static bool ComparePatchedField<T>(dynamic latestDoc, PatchOperation<T> patchOperation)
+    {
+        string path = patchOperation.Path.TrimStart('/');
+        dynamic? newValue = patchOperation.Value;
+        dynamic currentValue = latestDoc[path];
+
+        if (!Equals(currentValue, newValue))
+        {
+            return false; // Conflict detected
+        }
+        return true; // No changes, safe to retry
+    }
+
 #if false
 
     // Function to compare patched fields with the latest document state
@@ -182,6 +275,23 @@ class Program : IAsyncDisposable
         return true; // No changes, safe to retry
     }
 #endif
+
+    // Function to compare patched fields with the latest document state
+    static bool ComparePatchedFields(dynamic latestDoc, List<PatchOperationDynamic> patchOperations)
+    {
+        foreach (var op in patchOperations)
+        {
+            string path = op.Path.TrimStart('/');
+            dynamic newValue = op.Value;
+            dynamic currentValue = latestDoc[path];
+
+            if (!Equals(currentValue, newValue))
+            {
+                return false; // Conflict detected
+            }
+        }
+        return true; // No changes, safe to retry
+    }
 
     /// <summary>
     /// Function to compare patched fields with the latest document state
@@ -240,6 +350,39 @@ class Program : IAsyncDisposable
         }
     }
 #endif
+
+    // Function to resolve conflicts using a tie-breaker strategy
+    static void ResolveConflict(dynamic latestDoc, List<PatchOperationDynamic> patchOperations)
+    {
+        foreach (var op in patchOperations)
+        {
+            string path = op.Path.TrimStart('/');
+            dynamic newValue = op.Value;
+            dynamic currentValue = latestDoc[path];
+
+            // Example: Tie-breaker using LastUpdated timestamp
+            if (latestDoc.ContainsKey("lastUpdated"))
+            {
+                DateTime latestTimestamp = DateTime.Parse(latestDoc["lastUpdated"]);
+                DateTime incomingTimestamp = DateTime.UtcNow; // Assume incoming update is "now"
+
+                if (incomingTimestamp > latestTimestamp)
+                {
+                    Console.WriteLine($"Applying new value for {path} based on latest timestamp.");
+                    latestDoc[path] = newValue;
+                }
+                else
+                {
+                    Console.WriteLine($"Skipping update for {path} as existing data is newer.");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"No timestamp available, defaulting to latest value for {path}.");
+                latestDoc[path] = newValue; // Default resolution
+            }
+        }
+    }
 
     /// <summary>
     /// Function to resolve conflicts using a tie-breaker strategy
@@ -330,7 +473,30 @@ class Program : IAsyncDisposable
     }
 
 #endif
-    
+
+    static List<PatchOperationDynamic> FilterUnchangedFields(dynamic latestDoc, List<PatchOperationDynamic> patchOperations)
+    {
+        List<PatchOperationDynamic> filteredOperations = [];
+
+        foreach (var op in patchOperations)
+        {
+            string path = op.Path.TrimStart('/');
+            dynamic newValue = op.Value;
+            dynamic currentValue = latestDoc[path];
+
+            if (!Equals(currentValue, newValue))
+            {
+                filteredOperations.Add(op);  // Keep only changed fields
+            }
+            else
+            {
+                Console.WriteLine($"Skipping unchanged field: {path}");
+            }
+        }
+
+        return filteredOperations;
+    }
+
     /// <summary>
     /// Function to remove fields from patchOperations if their values are unchanged
     /// </summary>

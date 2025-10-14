@@ -79,7 +79,7 @@ class Program : IAsyncDisposable
                     Console.WriteLine("Conflict detected, resolving using tie-breaker...");
 
                     // Step 5: Resolve conflict using a tie-breaker strategy
-                    ResolveConflict(latestItem.Resource, patchOperations);
+                    patchOperations = ResolveConflict(latestItem.Resource, patchOperations);
                 }
                 
                 attempt++;
@@ -147,7 +147,7 @@ class Program : IAsyncDisposable
                     Console.WriteLine("Conflict detected, resolving using tie-breaker...");
 
                     // Step 5: Resolve conflict using a tie-breaker strategy
-                    ResolveConflict(latestItem.Resource, patchOperations);
+                    patchOperations = ResolveConflict(latestItem.Resource, patchOperations);
                 }
 
                 attempt++;
@@ -197,6 +197,7 @@ class Program : IAsyncDisposable
             }
             catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.PreconditionFailed)
             {
+
                 Console.WriteLine($"412 Precondition Failed - Conflict detected. Retrying... (Attempt {attempt + 1})");
 
                 // Step 3: Fetch latest version of the document
@@ -215,7 +216,7 @@ class Program : IAsyncDisposable
                     Console.WriteLine("Conflict detected, resolving using tie-breaker...");
 
                     // Step 5: Resolve conflict using a tie-breaker strategy
-                    ResolveConflict(latestItem.Resource, patchOperations);
+                    patchOperations = ResolveConflict(latestItem.Resource, patchOperations);
                 }
 
                 attempt++;
@@ -256,15 +257,13 @@ class Program : IAsyncDisposable
         return true; // No changes, safe to retry
     }
 
-#if false
-
     // Function to compare patched fields with the latest document state
-    static bool ComparePatchedFields(dynamic latestDoc, List<PatchOperation> patchOperations)
+    static bool ComparePatchedFields(dynamic latestDoc, List<PatchOperation> patchOperations, CosmosSerializer cosmosSerializer)
     {
         foreach (var op in patchOperations)
         {
             string path = op.Path.TrimStart('/');
-            dynamic newValue = op.Value;
+            dynamic? newValue = op.ToValue<dynamic>(cosmosSerializer);
             dynamic currentValue = latestDoc[path];
 
             if (!Equals(currentValue, newValue))
@@ -274,7 +273,6 @@ class Program : IAsyncDisposable
         }
         return true; // No changes, safe to retry
     }
-#endif
 
     // Function to compare patched fields with the latest document state
     static bool ComparePatchedFields(dynamic latestDoc, List<PatchOperationDynamic> patchOperations)
@@ -316,14 +314,13 @@ class Program : IAsyncDisposable
         return true; // No changes, safe to retry
     }
 
-#if false
     // Function to resolve conflicts using a tie-breaker strategy
-    static void ResolveConflict(dynamic latestDoc, List<PatchOperation> patchOperations)
+    static void ResolveConflict(dynamic latestDoc, List<PatchOperation> patchOperations, CosmosSerializer cosmosSerializer)
     {
         foreach (var op in patchOperations)
         {
             string path = op.Path.TrimStart('/');
-            dynamic newValue = op.Value;
+            dynamic? newValue = op.ToValue<dynamic>(cosmosSerializer);
             dynamic currentValue = latestDoc[path];
 
             // Example: Tie-breaker using LastUpdated timestamp
@@ -349,7 +346,6 @@ class Program : IAsyncDisposable
             }
         }
     }
-#endif
 
     // Function to resolve conflicts using a tie-breaker strategy
     static void ResolveConflict(dynamic latestDoc, List<PatchOperationDynamic> patchOperations)
@@ -384,40 +380,53 @@ class Program : IAsyncDisposable
         }
     }
 
+
     /// <summary>
     /// Function to resolve conflicts using a tie-breaker strategy
     /// </summary>
-    /// <typeparam name="T"></typeparam>
     /// <param name="latestDoc"></param>
-    /// <param name="patchOperations"></param>
-    static void ResolveConflict<T>(dynamic latestDoc, List<PatchOperation<T>> patchOperations)
+    /// <param name="pendingPatches"></param>
+    /// <param name="conflictResolvers"></param>
+    static List<PatchOperation> ResolveConflict(dynamic latestDoc,
+        List<PatchOperation> pendingPatches,
+        CosmosSerializer cosmosSerializer,
+        Dictionary<string, Func<(PatchOperation PatchOperation, dynamic DocumentValue), dynamic>>? conflictResolvers = null)
     {
-        foreach (var op in new List<PatchOperation<T>>(patchOperations))
+
+        foreach (var op in new List<PatchOperation>(pendingPatches))
         {
             string path = op.Path.TrimStart('/');
-            T? newValue = op.OperationType switch
-            {
-                PatchOperationType.Increment => op switch
-                {
-                    PatchOperation<long> longPatchOperation => latestDoc[path] is not null ? Convert.ToInt64(latestDoc[path]) + op.Value : null,
-                    PatchOperation<double> doublePatchOperation => latestDoc[path] is not null ? Convert.ToDouble(latestDoc[path]) + op.Value : null,
-                    _ => throw new NotSupportedException("Unsupported PatchOperation type")
-                },
-                _ => op.Value
-            };
+            dynamic? value = op.ToValue<dynamic>(cosmosSerializer);
             if (latestDoc[path] is null)
             {
-                if(op.OperationType == PatchOperationType.Increment || 
+                if (op.OperationType == PatchOperationType.Increment ||
                      op.OperationType == PatchOperationType.Replace ||
-                     op.OperationType == PatchOperationType.Set)
+                     op.OperationType == PatchOperationType.Set ||
+                     op.OperationType == PatchOperationType.Remove)
                 {
                     //If the field is null, we can't increment or replace it
-                    patchOperations.Remove(op);
+                    if (op.OperationType == PatchOperationType.Remove)
+                    {
+                        pendingPatches.Remove(op);
+                    }
                     //Depending on the use case, you may want to add a new operation to set the value
-                    //patchOperations.Add(PatchOperation.Set(path, newValue));
+                    //but PatchOperation newOp = PatchOperation.Add(op.Path, op.Value);
+                    pendingPatches.Add(PatchOperation.Add(op.Path, value));
                 }
                 continue;
             }
+            dynamic? newValue = op.OperationType switch
+            {
+                PatchOperationType.Increment => op switch
+                {
+                    PatchOperation<int> intOperation => latestDoc[path] is not null ? Convert.ToInt64(latestDoc[path]) + Convert.ToInt64(value) : null,
+                    PatchOperation<long> longPatchOperation => latestDoc[path] is not null ? Convert.ToInt64(latestDoc[path]) + Convert.ToInt64(value) : null,
+                    PatchOperation<float> floatPatchOperation => latestDoc[path] is not null ? Convert.ToDouble(latestDoc[path]) + Convert.ToDouble(value) : null,
+                    PatchOperation<double> doublePatchOperation => latestDoc[path] is not null ? Convert.ToDouble(latestDoc[path]) + Convert.ToDouble(value) : null,
+                    _ => throw new NotSupportedException("Unsupported PatchOperation type")
+                },
+                _ => conflictResolvers is not null ? conflictResolvers[op.Path]((op, latestDoc[path])) : value
+            };
             // Example: Tie-breaker using LastUpdated timestamp
             if (latestDoc.ContainsKey("lastUpdated"))
             {
@@ -435,7 +444,7 @@ class Program : IAsyncDisposable
                 else
                 {
                     Console.WriteLine($"Skipping update for {path} as existing data is newer.");
-                    patchOperations.Remove(op); // Skip this operation
+                    pendingPatches.Remove(op); // Skip this operation
                 }
             }
             else
@@ -444,19 +453,165 @@ class Program : IAsyncDisposable
                 latestDoc[path] = newValue; // Default resolution
             }
         }
+        return FilterUnchangedFields(latestDoc, pendingPatches);
+    }
+
+    /// <summary>
+    /// Function to resolve conflicts using a tie-breaker strategy 
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="latestDoc"></param>
+    /// <param name="pendingPatches"></param>
+    /// <param name="conflictResolvers"></param>
+    static List<PatchOperation<T>> ResolveConflict<T>(dynamic latestDoc,
+        List<PatchOperation<T>> pendingPatches,
+        Dictionary<string, Func<(PatchOperation<T> PatchOperation , dynamic DocumentValue), T>>? conflictResolvers = null)
+    {
+        foreach (var op in new List<PatchOperation<T>>(pendingPatches))
+        {
+            string path = op.Path.TrimStart('/');
+            if (latestDoc[path] is null)
+            {
+                if(op.OperationType == PatchOperationType.Increment || 
+                     op.OperationType == PatchOperationType.Replace ||
+                     op.OperationType == PatchOperationType.Set     ||
+                     op.OperationType == PatchOperationType.Remove)
+                {
+                    //If the field is null, we can't increment or replace it
+                    if (op.OperationType == PatchOperationType.Remove)
+                    {
+                        pendingPatches.Remove(op);
+                    }
+                    //Depending on the use case, you may want to add a new operation to set the value
+                    //but PatchOperation<T> newOp = PatchOperation<T>.Add(op.Path, op.Value);
+                }
+                continue;
+            }
+            T? newValue = op.OperationType switch
+            {
+                PatchOperationType.Increment => op switch
+                {
+                    PatchOperation<int> intOperation => latestDoc[path] is not null ? Convert.ToInt64(latestDoc[path]) + op.Value : null,
+                    PatchOperation<long> longPatchOperation => latestDoc[path] is not null ? Convert.ToInt64(latestDoc[path]) + op.Value : null,
+                    PatchOperation<float> floatPatchOperation => latestDoc[path] is not null ? Convert.ToDouble(latestDoc[path]) + op.Value : null,
+                    PatchOperation<double> doublePatchOperation => latestDoc[path] is not null ? Convert.ToDouble(latestDoc[path]) + op.Value : null,
+                    _ => throw new NotSupportedException("Unsupported PatchOperation type")
+                },
+                _ => conflictResolvers is not null ? conflictResolvers[op.Path]((op, latestDoc[path])) : op.Value
+            };
+            // Example: Tie-breaker using LastUpdated timestamp
+            if (latestDoc.ContainsKey("lastUpdated"))
+            {
+                DateTime latestTimestamp = DateTime.TryParse(latestDoc["lastUpdated"], out latestTimestamp);
+                DateTime incomingTimestamp = DateTime.UtcNow; // Assume incoming update is "now"
+
+                if (incomingTimestamp > latestTimestamp)
+                {
+                    Console.WriteLine($"Applying new value for {path} based on latest timestamp.");
+                    if (latestDoc[path] is not null)
+                    {
+                        latestDoc[path] = newValue;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"Skipping update for {path} as existing data is newer.");
+                    pendingPatches.Remove(op); // Skip this operation
+                }
+            }
+            else
+            {
+                Console.WriteLine($"No timestamp available, defaulting to latest value for {path}.");
+                latestDoc[path] = newValue; // Default resolution
+            }
+        }
+        return FilterUnchangedFields(latestDoc, pendingPatches);
+    }
+
+    /// <summary>
+    /// Function to resolve conflicts using a tie-breaker strategy
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="latestDoc"></param>
+    /// <param name="pendingPatches"></param>
+    /// <param name="conflictResolvers"></param>
+    static List<CustomPatchOperation<T>> ResolveConflict<T>(dynamic latestDoc,
+        IList<CustomPatchOperation<T>> pendingPatches,
+        Dictionary<string, Func<(CustomPatchOperation<T> PatchOperation, dynamic DocumentValue), T>>? conflictResolvers = null)
+    {
+        foreach (var op in new List<CustomPatchOperation<T>>(pendingPatches))
+        {
+            string path = op.Path.TrimStart('/');
+            if (latestDoc[path] is null)
+            {
+                if (op.OperationType == PatchOperationType.Increment ||
+                     op.OperationType == PatchOperationType.Replace ||
+                     op.OperationType == PatchOperationType.Set ||
+                     op.OperationType == PatchOperationType.Remove)
+                {
+                    //If the field is null, we can't increment or replace it
+                    if (op.OperationType == PatchOperationType.Remove)
+                    {
+                        pendingPatches.Remove(op);
+                    }
+                    //Depending on the use case, you may want to add a new operation to set the value
+
+                    //but PatchOperation newOp = PatchOperation.Add(op.Path, op.Value);
+                    pendingPatches.Add(new CustomPatchOperation<T>(op.OperationType, op.Path, op.Value));
+                }
+                continue;
+            }
+            T? newValue = op.OperationType switch
+            {
+                PatchOperationType.Increment => op switch
+                {
+                    PatchOperation<int> intOperation => latestDoc[path] is not null ? Convert.ToInt64(latestDoc[path]) + op.Value : null,
+                    PatchOperation<long> longPatchOperation => latestDoc[path] is not null ? Convert.ToInt64(latestDoc[path]) + op.Value : null,
+                    PatchOperation<float> floatPatchOperation => latestDoc[path] is not null ? Convert.ToDouble(latestDoc[path]) + op.Value : null,
+                    PatchOperation<double> doublePatchOperation => latestDoc[path] is not null ? Convert.ToDouble(latestDoc[path]) + op.Value : null,
+                    _ => throw new NotSupportedException("Unsupported PatchOperation type")
+                },
+                _ => conflictResolvers is not null ? conflictResolvers[op.Path]((op, latestDoc[path])) : op.Value
+            };
+            // Example: Tie-breaker using LastUpdated timestamp
+            if (latestDoc.ContainsKey("lastUpdated"))
+            {
+                DateTime latestTimestamp = DateTime.TryParse(latestDoc["lastUpdated"], out latestTimestamp);
+                DateTime incomingTimestamp = DateTime.UtcNow; // Assume incoming update is "now"
+
+                if (incomingTimestamp > latestTimestamp)
+                {
+                    Console.WriteLine($"Applying new value for {path} based on latest timestamp.");
+                    if (latestDoc[path] is not null)
+                    {
+                        latestDoc[path] = newValue;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"Skipping update for {path} as existing data is newer.");
+                    pendingPatches.Remove(op); // Skip this operation
+                }
+            }
+            else
+            {
+                Console.WriteLine($"No timestamp available, defaulting to latest value for {path}.");
+                latestDoc[path] = newValue; // Default resolution
+            }
+        }
+        return FilterUnchangedFields(latestDoc, pendingPatches);
     }
 
 
-#if false
     // Function to remove fields from patchOperations if their values are unchanged
-    static List<PatchOperation> FilterUnchangedFields(dynamic latestDoc, List<PatchOperation> patchOperations)
+    static List<PatchOperation> FilterUnchangedFields(dynamic latestDoc, List<PatchOperation> patchOperations, CosmosSerializer cosmosSerializer)
     {
         List<PatchOperation> filteredOperations = new();
 
         foreach (var op in patchOperations)
         {
             string path = op.Path.TrimStart('/');
-            dynamic newValue = op.Value;
+            dynamic? newValue = op.ToValue<dynamic>(cosmosSerializer);
             dynamic currentValue = latestDoc[path];
 
             if (!Equals(currentValue, newValue))
@@ -471,8 +626,6 @@ class Program : IAsyncDisposable
 
         return filteredOperations;
     }
-
-#endif
 
     static List<PatchOperationDynamic> FilterUnchangedFields(dynamic latestDoc, List<PatchOperationDynamic> patchOperations)
     {

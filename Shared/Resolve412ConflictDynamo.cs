@@ -1,10 +1,11 @@
+using Azure;
+using Microsoft.Azure.Cosmos;
+using Shared;
 using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Numerics;
 using System.Threading.Tasks;
-using Microsoft.Azure.Cosmos;
-using Shared;
 
 class Program : IAsyncDisposable
 {
@@ -36,7 +37,12 @@ class Program : IAsyncDisposable
 #endif
     }
 
-    static async Task PatchWithRetriesAsync(string itemId, string partitionKey, List<PatchOperation> patchOperations, int maxRetries = 5)
+    static async Task PatchWithRetriesAsync(
+        string itemId,
+        string partitionKey,
+        List<PatchOperation> patchOperations,
+        int maxRetries = 5,
+        string PreemptiveEtag = "")
     {
         int attempt = 0;
         while (attempt < maxRetries)
@@ -44,9 +50,14 @@ class Program : IAsyncDisposable
             try
             {
                 // Step 1: Fetch latest ETag before applying patch
-                ItemResponse<dynamic> currentItem = await container.ReadItemAsync<dynamic>(itemId, new PartitionKey(partitionKey));
+                ItemResponse<dynamic> currentItem = await container.ReadItemAsync<dynamic>(itemId, new PartitionKey(partitionKey),
+                    new ItemRequestOptions
+                    {
+                        IfNoneMatchEtag = PreemptiveEtag
+                    });
                 string etag = currentItem.ETag;  // Latest ETag
-
+                PreemptiveEtag = etag;
+                patchOperations = FilterUnchangedFields(currentItem.Resource, patchOperations, cosmosClient.ClientOptions.Serializer);
                 // Step 2: Apply Patch with ETag validation
                 ItemResponse<dynamic> patchedItem = await container.PatchItemAsync<dynamic>(
                     itemId,
@@ -55,33 +66,61 @@ class Program : IAsyncDisposable
                     new PatchItemRequestOptions { IfMatchEtag = etag },
                     cancellationTokenSource.Token  // Enforce ETag check
                 );
-
+                attempt++;
                 Console.WriteLine($"PATCH succeeded on attempt {attempt + 1}");
                 return;  // Success, exit loop
             }
             catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.PreconditionFailed)
             {
                 Console.WriteLine($"412 Precondition Failed - Conflict detected. Retrying... (Attempt {attempt + 1})");
-
+                attempt++;
                 // Step 3: Fetch latest version of the document
-                ItemResponse<dynamic> latestItem = await container.ReadItemAsync<dynamic>(itemId, new PartitionKey(partitionKey));
-                string latestEtag = latestItem.ETag;  // Updated ETag
-
-                // Step 4: Compare fields to check if conflicting updates exist
-                bool fieldsAreSame = ComparePatchedFields(latestItem.Resource, patchOperations);
-
-                if (fieldsAreSame)
+                try
                 {
-                    Console.WriteLine("Fields are unchanged, retrying with latest ETag...");
-                }
-                else
-                {
-                    Console.WriteLine("Conflict detected, resolving using tie-breaker...");
+                    ItemResponse<dynamic> latestItem = await container.ReadItemAsync<dynamic>(itemId, new PartitionKey(partitionKey),
+                    new ItemRequestOptions
+                    {
+                        IfNoneMatchEtag = PreemptiveEtag
+                    });
+                    string latestEtag = latestItem.ETag;  // Updated ETag
+                    PreemptiveEtag = latestEtag;
+                    // Step 4: Compare fields to check if conflicting updates exist
+                    bool fieldsAreSame = ComparePatchedFields(latestItem.Resource, patchOperations, cosmosClient.ClientOptions.Serializer);
 
-                    // Step 5: Resolve conflict using a tie-breaker strategy
-                    patchOperations = ResolveConflict(latestItem.Resource, patchOperations);
+                    if (fieldsAreSame)
+                    {
+                        Console.WriteLine("Fields are unchanged, retrying with latest ETag...");
+                    }
+                    else
+                    {
+                        Console.WriteLine("Conflict detected, resolving using tie-breaker...");
+
+                        // Step 5: Resolve conflict using a tie-breaker strategy
+                        patchOperations = ResolveConflict(latestItem.Resource, patchOperations, cosmosClient.ClientOptions.Serializer);
+                    }
                 }
-                
+                catch (CosmosException ex_ex) when (ex_ex.StatusCode == HttpStatusCode.NotModified 
+                    && PreemptiveEtag == ex.Headers.ETag)
+                {
+                    // AI: No changes, safe to retry
+                }
+            }
+            catch(CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotModified)
+            {
+                try
+                {
+                    ItemResponse<dynamic> patchedItem = await container.PatchItemAsync<dynamic>(
+                    itemId,
+                    new PartitionKey(partitionKey),
+                    patchOperations,
+                    new PatchItemRequestOptions { IfMatchEtag = ex.Headers.ETag },
+                    cancellationTokenSource.Token);  // Enforce ETag check
+                }
+                catch (CosmosException ex_ex) when (ex_ex.StatusCode == HttpStatusCode.PreconditionFailed 
+                    && ex.Headers.ETag != ex_ex.Headers.ETag)
+                {
+                    Console.WriteLine("unknow data change was detected, retrying...");
+                }
                 attempt++;
             }
             catch (Exception ex)
@@ -172,7 +211,6 @@ class Program : IAsyncDisposable
                 // Step 1: Fetch latest ETag before applying patch
                 ItemResponse<dynamic> currentItem = await container.ReadItemAsync<dynamic>(itemId, new PartitionKey(partitionKey));
                 string etag = currentItem.ETag;  // Latest ETag
-
                 // Step 2: Apply Patch with ETag validation
                 ItemResponse<dynamic> patchedItem = await container.PatchItemAsync<dynamic>(
                     itemId,
@@ -197,7 +235,7 @@ class Program : IAsyncDisposable
             }
             catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.PreconditionFailed)
             {
-
+                //etag does not match
                 Console.WriteLine($"412 Precondition Failed - Conflict detected. Retrying... (Attempt {attempt + 1})");
 
                 // Step 3: Fetch latest version of the document
